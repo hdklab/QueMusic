@@ -61,6 +61,17 @@ bash packaging/build-linux.sh
 4. 构建 Release 版
 5. 打包出自包含的 **`QueMusic-x86_64.AppImage`**
 
+脚本会自行处理下面几件容易踩坑的事，不用手动干预：
+
+| 情况 | 脚本的处理 |
+|------|------------|
+| 没有系统 FFmpeg 开发包（`libav*-dev`） | 回落到 Qt 自带的 FFmpeg 7.1.3（自动加 `-DQUEMUSIC_FFMPEG_USE_QT=ON`）；两者都没有才报错 |
+| 本机 Qt 带的 SQL 驱动缺运行库（如 `oci` 需要 Oracle 的 `libclntsh`） | 用一份插件影子目录只保留 `sqlite` 驱动，并包装 `qmake` 把 `QT_INSTALL_PLUGINS` 指过去；**不改动**你的 Qt 安装 |
+| 没有 `/dev/fuse`（容器 / 精简系统） | linuxdeploy 自动改用解包运行模式（`APPIMAGE_EXTRACT_AND_RUN=1`） |
+| linuxdeploy 漏带 Wayland 插件 | 显式补上 `wayland-shell-integration` / `wayland-graphics-integration-client` / `wayland-decoration-client` |
+
+中间产物：构建目录 `build-linux/`、打包环境 `build-linux/pack-env/`、工具 `packaging/tools/`，都可随时删除。
+
 ### 试运行
 
 ```bash

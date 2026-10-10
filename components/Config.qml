@@ -10,7 +10,7 @@ Settings {
 
     //全局
     property real musicVolume: 0.6
-    property bool closeToManage: false //关闭则最小化托盘
+    property bool backgroundPlay: true //关闭窗口后隐藏到后台继续播放（无托盘时靠再次启动唤回）
     property bool rememberWindow: false //记住窗口位置和大小
     property int winX: 0
     property int winY: 0

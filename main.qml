@@ -31,6 +31,7 @@ Window {
         Options.openMaxLyric = openMaxLyric
         Options.settingOutAnime = settingOutAnime
         Options.mainSearchInput = mainSearchInput
+        Options.controls = win
         windowAgent.setup(window);
         // dark-mode / extra-margins / title-bar-height 是 Windows 专有属性
         if(!Options.isMacOS) {
@@ -72,6 +73,11 @@ Window {
             if(Config.autoUpdate)
                 autoUpdateTimer.start();
         });
+
+        // 单实例唤回请求可能比 QML 更早到达（用户连点两次图标）：
+        // 此时窗口本来就会显示，清掉标记即可，避免留下一个永远为真的 pending
+        if(AppInstance.raisePending)
+            AppInstance.clearRaisePending();
     }
 
     Binding {
@@ -123,14 +129,9 @@ Window {
         Options.exitIndex = 1;
     }
 
-    // 系统级关闭（Alt+F4、任务栏右键"关闭窗口"）与关闭按钮行为保持一致
+    // 系统级关闭（Alt+F4、任务栏右键"关闭窗口"）与关闭按钮行为保持一致：
+    // 后台播放开启 → 只隐藏窗口；关闭 → 保存会话后退出。两条路都在 toClosing 里分流。
     onClosing: (close) => {
-        if(win.closeToTray()) {
-            close.accepted = false;
-            win.hideToTray();
-            return;
-        }
-        // 未开启托盘时也要走保存与会话收尾，不能直接放行
         close.accepted = false;
         win.toClosing();
     }
@@ -887,6 +888,17 @@ Window {
             // 左键单击 / 双击托盘图标：恢复主界面
             if(reason === SystemTrayManager.Trigger || reason === SystemTrayManager.DoubleClick)
                 win.restoreWindow();
+        }
+    }
+
+    // 无托盘环境下的唤回入口：后台播放把窗口藏起来后，唯一的办法是再次启动 QueMusic，
+    // 新进程会把请求转给这里（本进程），由主窗口重新显示出来
+    Connections {
+        target: AppInstance
+        function onRaiseRequested(): void {
+            console.log("[后台播放] 已按第二次启动的请求唤回主窗口");
+            win.restoreWindow();
+            Options.warned("QueMusic 正在后台播放，窗口已唤回", 0);
         }
     }
 

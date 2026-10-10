@@ -14,6 +14,11 @@ QtObject {
     property SmtcBridge smtc
     readonly property bool isMacOS: Qt.platform.os === "osx"
 
+    // 主窗口生命周期对象（layout/WindowControls.qml）。
+    // 用 var 而不是具体类型：WindowControls 反过来依赖 Config，
+    // 写成强类型会让两个单例互相依赖，AOT 生成时不好收场。
+    property var controls
+
     property Item mainLayout
     property GetWave getWave
     property Loader textWatch

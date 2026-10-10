@@ -19,7 +19,7 @@ class SystemTrayManager : public QObject
     Q_OBJECT
     QML_ELEMENT
 
-    Q_PROPERTY(bool available READ isAvailable CONSTANT FINAL)   // 平台不支持时 QML 侧退回普通关闭
+    Q_PROPERTY(bool available READ isAvailable CONSTANT FINAL)   // 平台不支持时没有托盘图标，但不影响后台播放
     Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)
     Q_PROPERTY(QString iconSource READ iconSource WRITE setIconSource NOTIFY iconSourceChanged FINAL)
     Q_PROPERTY(QString title READ title WRITE setTitle NOTIFY titleChanged FINAL)

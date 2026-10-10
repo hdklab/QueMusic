@@ -93,7 +93,9 @@ SystemTrayManager::SystemTrayManager(QObject *parent)
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         m_tray->show(); // 常驻显示：窗口隐藏后从托盘恢复
     } else {
-        qWarning() << "[系统托盘] 当前平台不支持系统托盘，关闭窗口将直接退出";
+        // 托盘不可用时后台播放依然成立：窗口藏起来后靠再次启动 QueMusic 唤回
+        qWarning() << "[系统托盘] 当前平台不支持系统托盘，托盘图标与菜单不可用；"
+                      "后台播放不受影响，再次启动 QueMusic 即可唤回窗口";
     }
 
     if (m_tray->icon().isNull())

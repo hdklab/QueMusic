@@ -241,6 +241,8 @@ qt6_add_qml_module(${PROJECT_NAME} # 默认导入项目的
         cpp/WindowsSmtcManager.h
         cpp/LogManager.cpp
         cpp/LogManager.h
+        cpp/AppInstance.cpp
+        cpp/AppInstance.h
         cpp/SystemTrayManager.cpp
         cpp/SystemTrayManager.h
         cpp/audio/AudioEngine.cpp

@@ -103,3 +103,26 @@
 - 在线 API：网易云登录被风控拦截、网易云 VIP 标识错标、酷狗 VIP 角标不显示、酷狗分类页曲目数恒为 0、
   酷狗歌手名越界读取（贡献者 @NOI-zl）
 - Linux tar 打包与一键打包脚本；`qmllint` 属性名错误（`AudioEngine` 属性提升、去掉 `mainMedia` 影子属性）
+
+## [未发布]
+
+### 新增
+- **后台播放**：关闭窗口不再结束进程，音乐与音频线程继续；有系统托盘时隐藏到托盘，没有托盘的环境
+  （GNOME 默认等）隐藏窗口并提示「再次启动 QueMusic 唤回」。设置项「最小化托盘」升级为「后台播放」，
+  默认开启；改名为「退出 QueMusic」的独立按钮负责真正退出（保存播放列表与历史后关闭）
+- **单实例唤回**：新增 `cpp/AppInstance`（QLocalServer）。第二个 QueMusic 进程只把唤回请求转给已运行
+  的实例，自身毫秒级退出，不再起第二套引擎/账号/音频线程；窗口隐藏后再次启动图标即可唤回
+
+### 变更
+- 关闭窗口时统一先保存会话（当前曲目、播放列表、窗口几何），避免转入后台后进程被杀导致状态丢失
+- 托盘不可用时的日志提示改为「托盘图标与菜单不可用；后台播放不受影响，再次启动 QueMusic 即可唤回窗口」
+
+### 修复
+- 无系统托盘环境下关闭窗口会直接退出、音乐中断（此前「最小化托盘」依赖 `tray.available`）
+- **Linux 打包（`packaging/build-linux.sh`）本机可一把跑通**：
+  - 没有系统 FFmpeg 开发包时自动回落 Qt 自带的 FFmpeg（`-DQUEMUSIC_FFMPEG_USE_QT=ON`），不再直接失败
+  - linuxdeploy 不再因为 Qt 自带的无关 SQL 驱动（`oci` 需要 Oracle `libclntsh` 等）缺依赖而中断：
+    改用插件影子目录只保留 sqlite 驱动 + 包装 `qmake` 指路，且**不再删改用户的 Qt 安装**
+  - 无 `/dev/fuse`（容器 / 精简系统）时自动以解包模式运行 linuxdeploy
+  - 补上 linuxdeploy 漏带的 `wayland-shell-integration` / `wayland-graphics-integration-client` /
+    `wayland-decoration-client`，避免 Wayland 会话下产物起不来

@@ -9,6 +9,10 @@
 #   - 使用 aqtinstall 安装与 Windows 一致的 Qt 6.10.3,
 #     避免与系统 Qt 版本不一致产生兼容性风险
 #   - 通过 linuxdeploy + qt 插件打包自包含 AppImage
+#   - FFmpeg 优先用系统开发包；没有（本机即如此）就回落 Qt 自带的 FFmpeg 7.1.3
+#   - linuxdeploy 的插件目录走一份「影子副本」，只保留 sqlite 驱动：
+#     其余 SQL 驱动（oci/ibase/odbc…）常缺运行库，会让打包直接失败
+#   - 无 /dev/fuse 时（容器 / 精简系统）linuxdeploy 自动改用解包运行模式
 # ============================================================
 set -e
 
@@ -36,11 +40,14 @@ if [ -n "$MISSING" ]; then
     echo "    Debian: sudo apt install build-essential cmake ninja-build wget python3-pip git fuse libfuse2 libpulse-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev pkg-config"
     exit 1
 fi
-if ! pkg-config --exists libavcodec; then
-    echo "!! 缺少 FFmpeg 开发包（音频后端解码层）"
-    echo "    Arch:  sudo pacman -S ffmpeg pkgconf"
-    echo "    Debian: sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswresample-dev pkg-config"
-    exit 1
+# FFmpeg 解码层依赖有两种来源：系统 pkg-config，或 Qt 自带的 FFmpeg。
+# 这里只做探测，真正的取舍放在 Qt 就绪之后（[1.5/5]）——不少环境（含本机）并没有系统 libav*-dev。
+SYSTEM_FFMPEG=0
+pkg-config --exists libavcodec && SYSTEM_FFMPEG=1
+if [ "${SYSTEM_FFMPEG}" = 1 ]; then
+    echo "    系统 FFmpeg: 已找到（走 pkg-config）"
+else
+    echo "    系统 FFmpeg: 未找到，稍后回落到 Qt 自带的 FFmpeg"
 fi
 
 # ---------- 1. 安装 Qt 6.10.3 (不存在时才装) ----------
@@ -58,10 +65,34 @@ if [ ! -d "${QT_DIR}/${QT_VERSION}/gcc_64" ]; then
 else
     echo "==> [1/5] 检测到 Qt ${QT_VERSION}，跳过安装"
 fi
-export QMAKE="${QT_DIR}/${QT_VERSION}/gcc_64/bin/qmake"
+QT_PREFIX="${QT_DIR}/${QT_VERSION}/gcc_64"
+export QMAKE="${QT_PREFIX}/bin/qmake"
+
+# ---------- 1.5 决定 FFmpeg 来源 ----------
+FFMPEG_CMAKE_ARG=""
+if [ "${SYSTEM_FFMPEG}" = 0 ]; then
+    # cmake/external/ffmpeg.cmake 的 QUEMUSIC_FFMPEG_USE_QT 分支：直接链 Qt 自带的 FFmpeg 7.1.3
+    if compgen -G "${QT_PREFIX}/lib/libavcodec.so*" >/dev/null; then
+        FFMPEG_CMAKE_ARG="-DQUEMUSIC_FFMPEG_USE_QT=ON"
+        echo "==> [1.5/5] 回落 Qt 自带的 FFmpeg: ${QT_PREFIX}/lib/libavcodec.so"
+    else
+        echo "!! 既没有系统 FFmpeg 开发包，Qt 安装里也没有 libavcodec"
+        echo "    Arch:  sudo pacman -S ffmpeg pkgconf"
+        echo "    Debian: sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswresample-dev pkg-config"
+        exit 1
+    fi
+fi
 
 # ---------- 2. 下载 linuxdeploy 工具 ----------
 echo "==> [2/5] 准备 linuxdeploy 工具..."
+# linuxdeploy 与它的插件本身就是 AppImage：容器、精简系统常没有 /dev/fuse，
+# 这时必须走解包运行模式（插件作为子进程会继承该变量），否则报 "Cannot mount AppImage"
+if [ -e /dev/fuse ]; then
+    echo "    检测到 /dev/fuse，按挂载方式运行 linuxdeploy"
+else
+    export APPIMAGE_EXTRACT_AND_RUN=1
+    echo "    未检测到 /dev/fuse，linuxdeploy 改用解包运行模式"
+fi
 mkdir -p packaging/tools
 cd packaging/tools
 [ -f linuxdeploy-x86_64.AppImage ] || \
@@ -73,10 +104,16 @@ cd ../..
 
 # ---------- 3. CMake 配置与构建 ----------
 echo "==> [3/5] 配置并构建 (Qt ${QT_VERSION})..."
-cmake -B "${BUILD_DIR}" \
-    -DCMAKE_PREFIX_PATH="${QT_DIR}/${QT_VERSION}/gcc_64" \
-    -DCMAKE_BUILD_TYPE=Release \
+CMAKE_ARGS=(
+    -B "${BUILD_DIR}"
+    -DCMAKE_PREFIX_PATH="${QT_PREFIX}"
+    -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+)
+if [ -n "${FFMPEG_CMAKE_ARG}" ]; then
+    CMAKE_ARGS+=("${FFMPEG_CMAKE_ARG}")
+fi
+cmake "${CMAKE_ARGS[@]}"
 cmake --build "${BUILD_DIR}" -j"$(nproc)"
 
 # ---------- 4. 准备 AppDir ----------
@@ -131,6 +168,16 @@ if [ -d "${QT_PLUGIN_SRC}/egldeviceintegrations" ]; then
     cp -a "${QT_PLUGIN_SRC}/egldeviceintegrations"/. "${APP_DIR}/usr/plugins/egldeviceintegrations/"
 fi
 
+# Wayland 客户端运行时必需的三组插件。linuxdeploy-plugin-qt 不保证带上它们
+# （实测漏过），缺了会让 Wayland 会话下起不来，与上面 platforms/xcbglintegrations 同理显式拷贝。
+for d in wayland-decoration-client wayland-graphics-integration-client wayland-shell-integration; do
+    if [ -d "${QT_PLUGIN_SRC}/${d}" ]; then
+        mkdir -p "${APP_DIR}/usr/plugins/${d}"
+        cp -a "${QT_PLUGIN_SRC}/${d}"/. "${APP_DIR}/usr/plugins/${d}/"
+        echo "    附带 ${d}: $(ls "${QT_PLUGIN_SRC}/${d}" | wc -l) 个"
+    fi
+done
+
 # fcitx5 的 Qt6 输入法插件
 # 系统包里的插件（Ubuntu: fcitx5-frontend-qt6 / Arch: fcitx5-qt6）是针对「系统 Qt」编译的，
 # 与本项目 aqt 的 Qt 6.10.3 存在 ABI 风险。想严格匹配就先自行编译（与 CI 做法一致）：
@@ -165,8 +212,34 @@ export QML_SOURCES_PATHS="$(pwd)"
 export EXTRA_QT_MODULES="multimedia;sql;shadertools"
 export QT_QPA_PLATFORM=minimal   # 打包阶段无需显示
 
-# 删除无依赖的 Mimer SQL 驱动（libmimerapi.so 通常不存在，且本项目用不到）
-rm -f "${QT_DIR}/${QT_VERSION}/gcc_64/plugins/sqldrivers/libqsqlmimer.so"
+# 插件影子目录：linuxdeploy-plugin-qt 会照 QT_INSTALL_PLUGINS 把「所有」SQL 驱动都塞进 AppImage，
+# 而 oci / ibase / mysql / odbc / psql 这些驱动在本机往往缺运行库（如 oci 需要 Oracle 的
+# libclntsh.so.23.1），命中一个就直接打包失败。这里复制一份插件目录、只留 sqlite 驱动，
+# 再用 qmake 包装把 QT_INSTALL_PLUGINS 指过去——不改动用户的 Qt 安装
+# （旧做法是 rm Qt 目录里的驱动，Qt 只读安装时无效，也污染了公共依赖）。
+PACK_ENV="${BUILD_DIR}/pack-env"
+SHADOW_PLUGINS="${PWD}/${PACK_ENV}/qtplugins"
+rm -rf "${SHADOW_PLUGINS}"
+mkdir -p "${PACK_ENV}"
+cp -a "${QT_PLUGIN_SRC}" "${SHADOW_PLUGINS}"
+find "${SHADOW_PLUGINS}/sqldrivers" -maxdepth 1 -name '*.so' ! -name 'libqsqlite.so' -delete 2>/dev/null || true
+echo "    SQL 驱动仅保留: $(ls "${SHADOW_PLUGINS}/sqldrivers" 2>/dev/null | tr '\n' ' ')"
+
+REAL_QMAKE="${QT_PREFIX}/bin/qmake"
+QMAKE_WRAPPER="${PWD}/${PACK_ENV}/qmake"
+cat > "${QMAKE_WRAPPER}" <<EOF
+#!/usr/bin/env bash
+# linuxdeploy 用 \`qmake -query\` 取 Qt 各路径；这里只把 QT_INSTALL_PLUGINS 指向影子目录，
+# 其余查询原样透传。
+REAL="${REAL_QMAKE}"
+if [ "\$#" -eq 1 ] && [ "\$1" = "-query" ]; then
+    "\$REAL" -query | sed "s|^QT_INSTALL_PLUGINS:.*|QT_INSTALL_PLUGINS:${SHADOW_PLUGINS}|"
+else
+    exec "\$REAL" "\$@"
+fi
+EOF
+chmod +x "${QMAKE_WRAPPER}"
+export QMAKE="${QMAKE_WRAPPER}"
 
 ./packaging/tools/linuxdeploy-x86_64.AppImage \
     --appdir "${APP_DIR}" \

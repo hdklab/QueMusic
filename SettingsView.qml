@@ -988,13 +988,32 @@ Item {
                         }
 
                         SettingItemCard {
-                            label: "最小化托盘"
-                            tip: "开启后点击关闭按钮将隐藏窗口（任务栏不再显示），可从托盘图标恢复或退出"
+                            label: "后台播放"
+                            tip: "开启后点击关闭按钮只隐藏窗口，音乐继续播放；有系统托盘时点托盘图标恢复，没有托盘时再次启动 QueMusic 即可唤回窗口"
                             controlItem: QSwitch {
                                 anchors.fill: parent
                                 letRight: true
-                                switchTrue: Config.closeToManage
-                                onToggled: Config.closeToManage = !Config.closeToManage
+                                switchTrue: Config.backgroundPlay
+                                onToggled: Config.backgroundPlay = !Config.backgroundPlay
+                            }
+                        }
+
+                        SettingItemCard {
+                            label: "退出 QueMusic"
+                            tip: "保存播放列表与播放历史后退出应用；开启后台播放时点击关闭按钮不会退出"
+                            controlItem: QButton {
+                                anchors.fill: parent
+                                shadowEnabled: false
+                                radius: Style.labelRadius
+                                borderWidth: 2
+                                text: "退出"
+                                fontSize: Style.text
+                                onClicked: {
+                                    if(Options.controls)
+                                        Options.controls.quitApp();
+                                    else
+                                        Qt.quit();
+                                }
                             }
                         }
 

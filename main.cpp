@@ -11,8 +11,10 @@
 #include <QStandardPaths>
 #include <QtQuick/QQuickWindow>
 #include <QSettings>
+#include <QDebug>
 #include <QLibraryInfo>
 #include "cpp/AccountManager.h"
+#include "cpp/AppInstance.h"
 #include "cpp/LogManager.h"
 #include "api/MusicApiService.h"
 #include <QWKQuick/qwkquickglobal.h>
@@ -130,7 +132,17 @@ int main(int argc, char *argv[])
     QApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QApplication application(argc, argv);   // 用 QApplication：托盘图标/原生托盘菜单依赖 QtWidgets
-    application.setQuitOnLastWindowClosed(false);   // 常驻托盘：退出统一走 QML 的 Qt.quit()
+    application.setQuitOnLastWindowClosed(false);   // 后台播放：窗口藏起来不等于退出进程
+
+    // 单实例守卫：已有实例在跑就把「唤回主窗口」请求交给它，本进程直接退出。
+    // 放在所有初始化之前——二次启动只需要毫秒级完成，不该再起一套引擎、账号与音频线程。
+    AppInstance *appInstance = AppInstance::instance();
+    if (AppInstance::notifyRunningInstance()) {
+        // 此时 LogManager 还没接管消息，这行只在控制台/调试输出可见
+        qInfo() << "[单实例] 检测到正在运行的 QueMusic，已请求唤回其主窗口";
+        return 0;
+    }
+    appInstance->listen();
 
     QQuickWindow::setDefaultAlphaBuffer(true);
     QQmlApplicationEngine engine;
