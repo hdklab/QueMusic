@@ -27,6 +27,10 @@ ListView {
     property string toolText1: "\uf0c8"  // 行尾按钮：收藏（未收藏时为空心）
     property alias menu: menu
     property bool isEnd: false
+    // 加载态 / 空态：切平台时列表会先清空再重拉，给个明确的等待反馈。
+    // 两个属性都不设时行为与以前完全一致。
+    property bool loading: false
+    property string emptyText: ""
     property var toolHandler: null   // 返回 true 表示页面自行处理，跳过内置动作
     property var menuHandler: null
     readonly property string favType: isList ? "playlist" : "song"
@@ -47,6 +51,30 @@ ListView {
     }
     signal clicked(int index)
     signal ended()
+
+    // 加载中：转圈（覆盖在列表之上，不参与列表布局）
+    AnimatedImage {
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: view.emptyText !== "" ? -14 : 0
+        width: 36
+        height: 36
+        source: "qrc:/QueMusic/resources/loader.gif"
+        visible: view.count === 0 && view.loading
+        playing: visible
+    }
+    // 拉完了还是空：说明没拿到内容，别让用户盯着空白
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 24
+        width: Math.min(implicitWidth, view.width - 48)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        visible: view.count === 0 && !view.loading && view.emptyText !== ""
+        text: view.emptyText
+        color: Theme.textColor
+        font.pixelSize: Style.textmain
+    }
 
     onAtYEndChanged: {
         if (atYEnd && !MusicApi.loadState && count !== 0) ended();

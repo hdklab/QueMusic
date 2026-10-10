@@ -75,4 +75,4 @@ __pycache__/
 # 下面的例外必须在上面 "*.dll" / "*.a" 规则之后（git 忽略规则的顺序敏感）。
 !ffmpeg/bin/*.dll
 !ffmpeg/lib/*.dll.a
-
+*.AppImage

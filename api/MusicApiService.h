@@ -265,6 +265,9 @@ private:
     };
 
     int m_source = 0;
+    // 最近一次「榜单列表」请求的平台：>=0 单平台（用它丢弃切平台后迟到的旧响应），
+    // -1 表示双平台合并（getAllToplists，两个平台的响应都收）
+    int m_toplistRequestSource = -1;
     int m_soundQuality = 1; // 与 Options/soundQuality 同步（0 128k / 1 320k / 2+ flac）
     int m_localLyricsGeneration = 0; // 连续切歌时丢弃过期的歌词解析结果
     QHash<QString, QString> m_coverHintCache;

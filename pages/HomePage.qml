@@ -10,12 +10,23 @@ Item {
     id: homePage
     property real toolsWindow: 0
 
+    // 首页的「歌单分类」与「热门歌单」都是按平台取的。切换平台时必须清空后重新拉取，
+    // 否则热门歌单会一直空着（旧代码只 clear 没重拉），分类卡片还会停在旧平台的 tagid 上。
+    // 拉取期间置 true，给界面一个明确的等待反馈。
+    property bool hotRefreshing: false
+
+    function reloadHotSections(): void {
+        MusicApi.getHotlistMenu.clear();
+        MusicApi.hotPlayLists.clear();
+        hotRefreshing = true;
+        hotRefreshGuard.restart();
+        MusicApi.getHotPlaylistMenu(3);
+        MusicApi.getHotPlaylists(1);
+    }
 
     Component.onCompleted: {
         if(!Options.homeLoaded) {
-            MusicApi.getHotlistMenu.clear();
-            MusicApi.getHotPlaylistMenu(3);
-            MusicApi.getHotPlaylists(1);
+            reloadHotSections();
             const date = new Date();
             const timeHour = date.getHours();
             if(timeHour > 3 && timeHour < 9) {
@@ -31,7 +42,22 @@ Item {
             Options.homeLoaded = true;
         }
     }
-    
+
+    // 一次刷新可能同时有多个请求在飞，MusicApi.finished 只在全部结束后发一次
+    Connections {
+        target: MusicApi
+        function onFinished(): void {
+            homePage.hotRefreshing = false;
+            hotRefreshGuard.stop();
+        }
+    }
+    // 兜底：接口卡住/无响应时别让「正在刷新」一直挂着
+    Timer {
+        id: hotRefreshGuard
+        interval: 15000
+        onTriggered: homePage.hotRefreshing = false
+    }
+
     Item {
         id: homeMain
         anchors.fill: parent
@@ -68,7 +94,9 @@ Item {
                 onTransformed: (choiced) => {
                     MusicApi.songSource = choiced;
                     recommendView.scrollTop();
-                    MusicApi.hotPlayLists.clear();
+                    // 切平台后先把两块平台相关的数据清掉再重拉（此前只 clear 没重拉，热门歌单会一直空着）
+                    console.log("[首页] 切换平台 -> " + choiced + "，重新拉取歌单分类与热门歌单");
+                    homePage.reloadHotSections();
                 }
             }
         }
@@ -418,6 +446,16 @@ Item {
                             color: Theme.shadowColor
                         }
 
+                        // 分类也是按平台取的：刷新期间这里会先空一下，给个交代
+                        Text {
+                            x: 12
+                            y: 76
+                            visible: categoryList.count === 0
+                            text: homePage.hotRefreshing ? "正在刷新分类…" : "暂无分类"
+                            color: Theme.textColor
+                            font.pixelSize: Style.text
+                        }
+
                         ListView {
                             id: categoryList
                             y: 56
@@ -637,6 +675,8 @@ Item {
                     width: homeView.standWidth
                     height: homeView.height - 64
                     model: MusicApi.hotPlayLists
+                    loading: homePage.hotRefreshing
+                    emptyText: "没能拉到热门歌单，可切换平台或稍后重试"
                     cellWidth: 172
                     cellHeight: 280
                     rightMargin: -8

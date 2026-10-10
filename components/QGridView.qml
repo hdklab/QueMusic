@@ -3,6 +3,7 @@
 //
 import QtQuick
 import QtQuick.Controls.Basic
+import QueMusic 1.0
 
 GridView {
     id: view
@@ -15,12 +16,40 @@ GridView {
     rightMargin: 16
     property int scrollToY: view.contentY
     property bool enabled: true
+    // 加载态 / 空态：切平台、翻页时列表会先清空再重拉，给一个明确的等待反馈，
+    // 不然用户只看到一块空白。两个属性都不设时行为与以前完全一致。
+    property bool loading: false
+    property string emptyText: ""
     clip: true
     signal topScroll()
     function scrollTop(): void {
         listViewAnime.stop();
         scrollToY = - view.topMargin;
         contentY = - view.topMargin;
+    }
+
+    // 加载中：转圈（放在网格之上，不占布局）
+    AnimatedImage {
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: view.emptyText !== "" ? -14 : 0
+        width: 36
+        height: 36
+        source: "qrc:/QueMusic/resources/loader.gif"
+        visible: view.count === 0 && view.loading
+        playing: visible
+    }
+    // 拉完了还是空：说明没拿到内容（网络/平台接口问题），别再让用户盯着空白
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 24
+        width: Math.min(implicitWidth, view.width - 48)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        visible: view.count === 0 && !view.loading && view.emptyText !== ""
+        text: view.emptyText
+        color: Theme.textColor
+        font.pixelSize: Style.textmain
     }
 
     ScrollBar.vertical: ScrollBar {

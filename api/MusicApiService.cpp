@@ -431,6 +431,7 @@ void MusicApiService::getNewSongs(int type, int page, int pageSize, int source)
 
 void MusicApiService::getAllToplist(int source)
 {
+    m_toplistRequestSource = resolve(source);   // 单平台请求：用于丢弃切平台后迟到的旧结果
     m_toplistList.clear();
     beginRequest();
     DISPATCH(source, getAllToplist());
@@ -439,6 +440,7 @@ void MusicApiService::getAllToplist(int source)
 // 同时拉取酷狗 + 网易云的榜单列表，合并进 toplistList（每条带 source）
 void MusicApiService::getAllToplists()
 {
+    m_toplistRequestSource = -1;   // -1 = 双平台合并，两个平台的响应都要收
     m_toplistList.clear();
     // 两个平台各算一个未完成请求，任何一方先回来都不提前结束加载动画
     beginRequest();
@@ -1104,9 +1106,17 @@ void MusicApiService::handleResult(const QString &action, const QVariant &data, 
                 getLyricInfo(hash, request.duration, source);
             }
         } else {
+            // 用户搜索：只有这里才填「搜索结果列表」。切平台后旧平台迟到的结果不能混进来。
+            // ⚠️ 上面两支是本地歌词搜索 / B 站回退歌词，它们按「歌曲自己的平台」发起，
+            // 与当前 UI 平台无关，绝不能一起校验。
+            if (source != m_source)
+                return;
             m_searchSongsResults.append(normalizeList(info));
         }
     } else if (action == QLatin1String("getPlaylistMenu")) {
+        // 歌单分类：只有分类页按当前平台请求。切平台后旧平台的分类菜单会整个覆盖掉新的
+        if (source != m_source)
+            return;
         // 歌单分类：map 数组（QML 侧 text: modelData.title / [i].id 访问）
         QVariantList menu;
         for (const QVariant &v : info.toList()) {
@@ -1127,16 +1137,31 @@ void MusicApiService::handleResult(const QString &action, const QVariant &data, 
     } else if (action == QLatin1String("getRecommendSongs")) {
         m_recommendSongs.append(normalizeList(info));
     } else if (action == QLatin1String("getHotPlaylistMenu")) {
+        // 这两个列表只在首页按「当前平台」请求。切平台后旧平台迟到的响应必须丢掉：
+        // 否则会把上一个平台的分类覆盖进来 / 把旧平台的歌单并进新平台列表，
+        // 表现就是「切了平台还是旧内容」或新旧混在一起。
+        if (source != m_source)
+            return;
         m_getHotlistMenu.clear();
         m_getHotlistMenu.append(normalizeList(info));
     } else if (action == QLatin1String("getHotPlaylists")) {
+        if (source != m_source)
+            return;
         m_hotPlayLists.append(normalizeList(info));
     } else if (action == QLatin1String("getNewSongs")) {
+        // 同样只有分类页按当前平台请求
+        if (source != m_source)
+            return;
         m_newSongs.append(songList(info));
     } else if (action == QLatin1String("getMusicToplist")) {
         // 榜单歌曲 → 填 playlistSong（供 playListSongsWindow 展示）
         m_playlistSong.append(songList(info));
     } else if (action == QLatin1String("getAllToplist")) {
+        // 榜单列表有两个入口：单平台（分类页按当前平台）与双平台合并（getAllToplists，
+        // 故意同时要酷狗+网易云）。所以不能用「平台 == 当前平台」一刀切，
+        // 而是看最近一次请求是哪种：单平台时丢掉别的平台的迟到响应，双平台时全收。
+        if (m_toplistRequestSource >= 0 && m_toplistRequestSource != source)
+            return;
         // 单平台榜单列表：保留旧模型 + 累积到双平台模型（注入 source 供点击强制指定平台）
         m_musicToplist.clear();
         m_musicToplist.append(normalizeList(info));

@@ -16,6 +16,20 @@ Item {
 
     readonly property var filterItems: ["全部", "仅免费", "仅 VIP（付费）"]
 
+    // 分类菜单 / 新歌 / 榜单都按平台取：切换或首次加载时统一走这里，
+    // 刷新期间给出等待反馈（列表会先清空再重拉，不然只剩一块空白）。
+    property bool listRefreshing: false
+
+    function reloadPlatformLists(): void {
+        MusicApi.newSongs.clear();
+        MusicApi.toplistList.clear();
+        listRefreshing = true;
+        listRefreshGuard.restart();
+        MusicApi.getPlaylistMenu(3);
+        MusicApi.getNewSongs(1, 1, 20);
+        MusicApi.getAllToplist();
+    }
+
     function reloadCurrent(): void {
         if (inSongWindow) {
             MusicApi.playlistSong.clear();
@@ -72,12 +86,26 @@ Item {
 
     Component.onCompleted: {
         if(!Options.playlistLoaded) {
-            MusicApi.getPlaylistMenu(3);
-            MusicApi.getNewSongs(1, 1, 20);
-            MusicApi.getAllToplist();
+            reloadPlatformLists();
             Options.playlistLoaded = true;
         }
     }
+
+    // 一次刷新里有多个请求在飞，MusicApi.finished 只在全部结束后发一次
+    Connections {
+        target: MusicApi
+        function onFinished(): void {
+            playlistPage.listRefreshing = false;
+            listRefreshGuard.stop();
+        }
+    }
+    // 兜底：接口卡住/无响应时别让「正在刷新」一直挂着
+    Timer {
+        id: listRefreshGuard
+        interval: 15000
+        onTriggered: playlistPage.listRefreshing = false
+    }
+
 
     QPages {
         id: playlistChildPage
@@ -118,11 +146,9 @@ Item {
                 model: ["酷狗音乐","网易云音乐","哔哩哔哩","QQ音乐(x)","自定义源(x)"]
                 onTransformed: (choiced) => {
                     MusicApi.songSource = choiced;
-                    MusicApi.newSongs.clear();
-                    MusicApi.getPlaylistMenu(3);
-                    MusicApi.getNewSongs(1, 1, 20);
-                    MusicApi.getAllToplist();
+                    console.log("[分类页] 切换平台 -> " + choiced + "，重新拉取分类/新歌/榜单");
                     toplistFlick.scrollTop();
+                    playlistPage.reloadPlatformLists();
                 }
             }
         }
@@ -242,6 +268,8 @@ Item {
                 height: parent.height - 104
                 model: MusicApi.newSongs
                 clip: true
+                loading: playlistPage.listRefreshing
+                emptyText: "没能拉到新歌，可切换平台或稍后重试"
 
                 onEnded: {
                     if(MusicApi.newSongs.count % 20 === 0 && MusicApi.newSongs.count !== 0) {
@@ -370,6 +398,8 @@ Item {
                 width: parent.width + 16
                 height: parent.height
                 model: MusicApi.toplistList
+                loading: playlistPage.listRefreshing
+                emptyText: "没能拉到榜单，可切换平台或稍后重试"
                 cellWidth: 180
                 cellHeight: 240
                 rightMargin: -8
