@@ -346,6 +346,7 @@ void MusicApiService::syncSource(int source)
     else if (source == kSourceKugou) {
         m_kugou.setCookie(m_account->kugouCookie());
         m_kugou.setDeviceInfo(m_account->kugouMid(), m_account->kugouDfid());
+        m_kugou.setQuality(m_soundQuality);
     }
 }
 
@@ -387,7 +388,9 @@ void MusicApiService::getMusicPlaylists(const QString &tagid, int page, int page
 // 分类页的歌单（酷狗走 category/special，与首页热门分类卡片的 tag 体系不同源）
 void MusicApiService::getCategoryPlaylists(const QString &id, int page, int pageSize, int source)
 {
-    setLoadState(true);
+    // 必须走统一入口：否则平台结果回来时的 endRequest() 会偷别的请求的计数，
+    // 而本请求挂起时又没有任何看门狗兜底
+    beginRequest();
     const int resolved = resolve(source);
     syncSource(resolved);
     if (resolved == kSourceKugou)
@@ -508,7 +511,6 @@ void MusicApiService::getComments(const QString &hash, int page, int pageSize, i
     if (hash.isEmpty())
         return;
     beginRequest();
-    //m_comments.setItems(QVariantList()); 清空个p
     DISPATCH(source, getComments(hash, qMax(1, page), qBound(1, pageSize, 50)));
 }
 
@@ -807,7 +809,7 @@ void MusicApiService::setAllPlaylistMenu(const QVariant &v)
     emit allPlaylistMenuChanged();
 }
 
-void MusicApiService::setLyricsData(const QVariant &v)
+void MusicApiService::setLyricsData(const QVariantList &v)
 {
     if (m_lyricsData == v)
         return;
@@ -817,7 +819,7 @@ void MusicApiService::setLyricsData(const QVariant &v)
     emit lyricsDataChanged();
 }
 
-void MusicApiService::setLyricsTranslate(const QVariant &v)
+void MusicApiService::setLyricsTranslate(const QVariantList &v)
 {
     if (m_lyricsTranslate == v)
         return;
@@ -825,9 +827,8 @@ void MusicApiService::setLyricsTranslate(const QVariant &v)
     emit lyricsTranslateChanged();
 }
 
-void MusicApiService::rebuildLyricTimes(const QVariant &v)
+void MusicApiService::rebuildLyricTimes(const QVariantList &list)
 {
-    const QVariantList list = v.toList();
     m_lyricTimes.clear();
     m_lyricTimes.reserve(list.size());
     for (const QVariant &item : list)
@@ -840,6 +841,14 @@ void MusicApiService::setLyricIndex(int index)
         return;
     m_lyricIndex = index;
     emit lyricIndexChanged();
+}
+
+void MusicApiService::setCommentsHasMore(bool hasMore)
+{
+    if (m_commentsHasMore == hasMore)
+        return;
+    m_commentsHasMore = hasMore;
+    emit commentsHasMoreChanged();
 }
 
 void MusicApiService::advanceLyricIndex()
@@ -1055,6 +1064,7 @@ void MusicApiService::handleResult(const QString &action, const QVariant &data, 
     // 评论：直接灌评论模型，不参与歌曲 hash 等后续处理
     if (action == QLatin1String("getComments")) {
         m_comments.append(requestFailed ? QVariantList() : info.toList());
+        setCommentsHasMore(!requestFailed && d.value(QStringLiteral("hasMore")).toBool());
         return;
     }
 
@@ -1227,7 +1237,7 @@ void MusicApiService::handleResult(const QString &action, const QVariant &data, 
                 onlineLyrics << line;
             }
             setLyricsData(onlineLyrics);
-            setLyricsTranslate(d.value(QStringLiteral("translate")));
+            setLyricsTranslate(d.value(QStringLiteral("translate")).toList());
 
             if (!lyricHash.isEmpty() && m_pendingLocalLyrics.contains(lyricHash)) {
                 const LocalLyricsRequest request = m_pendingLocalLyrics.take(lyricHash);

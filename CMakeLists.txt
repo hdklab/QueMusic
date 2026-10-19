@@ -27,6 +27,9 @@ endif()
 # 第三方依赖（QWindowKit、TagLib、zlib）与部署辅助函数
 add_subdirectory(cmake)
 
+# 歌词 PV 的 C++ 计算内核（独立 QML 模块 LyricPvCore，可被其它 PV 效果复用）
+add_subdirectory(cpp/lyricpvcore)
+
 set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
 qt_add_executable(${PROJECT_NAME}
     main.cpp
@@ -130,8 +133,14 @@ set_source_files_properties(
 file(GLOB_RECURSE QML_COMPONENTS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "components/*.qml")
 file(GLOB_RECURSE LAYOUT_QML RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "layout/*.qml")
 file(GLOB_RECURSE PAGE_QML RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "pages/*.qml")
-# 歌词界面预设目录（可整体替换的歌词界面）
 file(GLOB_RECURSE LYRICS_UI_QML RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS "lyricsui/*.qml")
+
+# JIZURA 歌词 PV：既是内置歌词主题，源码同时保留为可外置安装的插件目录
+file(GLOB LYRICS_JIZURA_QML RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+    "plugins/lyrics/jizura/jizura.qml"
+    "plugins/lyrics/jizura/qml/*.qml")
+file(GLOB LYRICS_JIZURA_JS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS
+    "plugins/lyrics/jizura/js/*.js")
 
 # 模块内全部 QML/JS；qmltc 跳过清单须在 qt6_add_qml_module() 解析参数前备好，故先统一为变量
 set(QUE_MUSIC_QML_FILES
@@ -140,6 +149,8 @@ set(QUE_MUSIC_QML_FILES
     api/qrcode.js
     ${LAYOUT_QML}
     ${LYRICS_UI_QML}
+    ${LYRICS_JIZURA_QML}
+    ${LYRICS_JIZURA_JS}
     ${PAGE_QML}
     ${QML_COMPONENTS}
     )
@@ -193,6 +204,7 @@ qt6_add_qml_module(${PROJECT_NAME} # 默认导入项目的
         shaders/LyricsStage.cpp
         shaders/LyricsStage.h
         cpp/AppModels.h
+        cpp/MediaTypes.h
         cpp/PlayerDatabase.cpp
         cpp/PlayerDatabase.h
         cpp/DbService.cpp
@@ -215,6 +227,8 @@ qt6_add_qml_module(${PROJECT_NAME} # 默认导入项目的
         cpp/AccountManager.h
         cpp/LocalLyricsReader.cpp
         cpp/LocalLyricsReader.h
+        cpp/SpringAnimator.cpp
+        cpp/SpringAnimator.h
         cpp/CustomFlow.cpp
         cpp/CustomFlow.h
         cpp/QueueModel.cpp
@@ -279,8 +293,6 @@ qt6_add_shaders(${PROJECT_NAME} "effectshaders"
         shaders/cardblur.frag
         shaders/cardblur_hq.frag
         shaders/bg_cubes.frag
-        shaders/bg_grid.frag
-        shaders/bg_beams.frag
         shaders/bg_stars.frag
         shaders/bg_stage.frag
         shaders/bg_void.frag
@@ -322,6 +334,10 @@ target_link_libraries(${PROJECT_NAME}
         quemusic::zlib
         quemusic::ffmpeg
         cryptopp::cryptopp
+        # LyricPvCore 是静态 QML 模块：除库本身外还要链它的 plugin 目标，
+        # 类型注册（qml_register_types_LyricPvCore）才会被拉进可执行文件
+        LyricPvCore
+        LyricPvCoreplugin
     PUBLIC
         QWindowKit::Quick
 )

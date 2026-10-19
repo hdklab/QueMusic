@@ -135,7 +135,7 @@ Item {
                 onClicked: AccountManager.startNeteaseQrLogin()
             }
 
-            // ---- 备用登录方式（扫码提示"环境异常"时用）----
+            // 备用登录方式（扫码提示"环境异常"时用）
             Text {
                 width: parent.width
                 text: "手机号登录被网易云风控拦截时，可改用：粘贴浏览器里的 Cookie（最稳）"
@@ -781,6 +781,20 @@ Item {
                         }
 
                         SettingItemCard {
+                            label: "配色方案"
+                            tip: "设置通过主题色来改变整个应用色调的方法"
+                            controlItem: QDrop {
+                                anchors.fill: parent
+                                choice: Style.colorStyle
+                                model: ["默认","Material","FluentUI","QuietUI","Material You"]
+                                onTransformed: (choiced) => {
+                                    Style.colorStyle = choiced;
+                                    Options.changeTheme();
+                                }
+                            }
+                        }
+
+                        SettingItemCard {
                             label: "应用背景"
                             tip: "设置在背景显示的样式"
                             isBigItem: true
@@ -802,7 +816,7 @@ Item {
                         SettingItemCard {
                             label: "选择背景图片"
                             tip: "设置应用背景壁纸显示的图片"
-                            visible: Style.backmode == 3
+                            visible: Style.backmode === 3
                             height: visible ? 64 : 0
                             Behavior on height { NumberAnimation { duration: 320; easing.type: Easing.OutExpo } }
                             controlItem: QDrop {
@@ -1154,7 +1168,7 @@ Item {
                             controlItem: QDrop {
                                 anchors.fill: parent
                                 choice: Style.sidebarStyle
-                                model: ["Basic","SquiwaUI"]
+                                model: ["Basic","Fancy"]
                                 onTransformed: (choiced) => {
                                     Style.sidebarStyle = choiced;
                                     Options.changeTheme();
@@ -1434,13 +1448,19 @@ Item {
                         }
 
                         SettingItemCard {
-                            label: "高级逐行弹簧动画"
-                            tip: "歌词逐行切换时使用更细腻的弹簧动画"
-                            controlItem: QSwitch {
+                            label: "弹簧动画过冲度"
+                            tip: "歌词逐行切换时弹簧动画弹过位置的弹动效果强度"
+                            controlItem: QSlider {
                                 anchors.fill: parent
-                                letRight: true
-                                switchTrue: Style.premiumLyricAnime
-                                onToggled: Style.premiumLyricAnime = !Style.premiumLyricAnime
+                                from: 0
+                                to: 4
+                                stepSize: 1
+                                leftText: true
+                                valueText: value + 1
+                                value: Style.springValue
+                                onMoved: {
+                                    Style.springValue = value
+                                }
                             }
                         }
 

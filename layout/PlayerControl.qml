@@ -18,20 +18,14 @@ Rectangle {
     // 宿主注入：播放引擎不再靠上下文继承访问宿主的局部 id
     readonly property AudioEngine player: Playback.player
 
+    // 秒级中间层：position 以 20Hz 刷新，直接绑到文本会每秒重建字符串 20 次
+    readonly property int posSec: Math.floor(player.position / 1000)
+
     readonly property string mediaTime: {
-        const seconds = Math.floor(player.position / 1000) % 60;
-        return Math.floor(player.position / 60000) + ':' + (seconds < 10 ? '0' + seconds : seconds);
+        const seconds = posSec % 60;
+        return Math.floor(posSec / 60) + ':' + (seconds < 10 ? '0' + seconds : seconds);
       }
 
-    Connections {
-        target: Options.queue
-        function onPlayListIndexChanged(): void {
-            if(Options.queue.playListIndex < 0)
-                return;
-            likeButton.iconColor = FavoriteSongs.isFavorite(Options.queue.get(Options.queue.playListIndex).path, "song")
-                                   ? Theme.themeColor : Theme.textColor;
-        }
-    }
 
     Rectangle {
         width: musicControlMin.width
@@ -57,7 +51,7 @@ Rectangle {
         MusicApi.searchSongsResults.clear();
         Options.mainSearchInput.text = name;
         MusicApi.nowIndex = 0;
-        mainContent.contentIndexed(6);
+        mainContent.contentIndexed(5);
         MusicApi.searchSongs(name, MusicApi.nowIndex, 1, 20);
         Options.exitIndex = 1;
     }
@@ -292,21 +286,26 @@ Rectangle {
             radius: 40
             buttonColor: "transparent"
             hoverColor: Theme.hoverColor
-            iconColor: Theme.textColor
+            // 听 favoriteRevision 重算：收藏夹弹窗改了归属后图标也能跟着变
+            iconColor: {
+                FavoriteSongs.favoriteRevision
+                const q = Options.queue
+                if (!q) return Theme.textColor
+                const i = q.playListIndex
+                if (i < 0 || i >= q.count) return Theme.textColor
+                const e = q.get(i)
+                return e && FavoriteSongs.isFavorite(e.path, "song") ? Theme.themeColor : Theme.textColor
+            }
             shadowEnabled: false
             onClicked: {
-                if(Options.queue.get(Options.queue.playListIndex).source !== -1) {
-                    console.log("收藏的hash/id:",Options.queue.get(Options.queue.playListIndex).path);
-                    if (FavoriteSongs.isFavorite(Options.queue.get(Options.queue.playListIndex).path, "song")) {
-                        FavoriteSongs.removeFavorite(Options.queue.get(Options.queue.playListIndex).path, "song");
-                        Options.warned("已取消收藏", 0);
-                        iconColor = Theme.textColor;
-                    } else {
-FavoriteSongs.addFavorite(Options.queue.get(Options.queue.playListIndex).path, Playback.musicTitle, Playback.musicArtist, Playback.player.urlStr, Options.queue.get(Options.queue.playListIndex).source, Math.floor(Playback.player.duration / 1000), "song");
-                        Options.warned("已收藏", 1);
-                        iconColor = Theme.themeColor;
-                    }
-                }
+                const i = Options.queue.playListIndex
+                if (i < 0 || i >= Options.queue.count) return
+                const row = Options.queue.get(i)
+                if (row.source === -1) { Options.warned("本地歌曲请使用本地收藏", 0); return }
+                Options.favPicker.show({ id: row.path, title: Playback.musicTitle,
+                                         artist: Playback.musicArtist, cover: Playback.player.urlStr,
+                                         source: row.source,
+                                         duration: Math.floor(Playback.player.duration / 1000) })
             }
             tipText: "收藏"
         }
@@ -541,7 +540,7 @@ FavoriteSongs.addFavorite(Options.queue.get(Options.queue.playListIndex).path, P
         }
     }
 
-    // 收藏/取消收藏当前曲目
+    // 收藏当前曲目：弹收藏夹选择
     function toggleFavorite(): void {
         const i = Options.queue.playListIndex;
         if(i < 0 || i >= Options.queue.count) return;
@@ -550,16 +549,9 @@ FavoriteSongs.addFavorite(Options.queue.get(Options.queue.playListIndex).path, P
             Options.warned("本地歌曲请使用本地收藏", 0);
             return;
         }
-        if(FavoriteSongs.isFavorite(e.path, "song")) {
-            FavoriteSongs.removeFavorite(e.path, "song");
-            likeButton.iconColor = Theme.textColor;
-            Options.warned("已取消收藏", 0);
-        } else {
-            FavoriteSongs.addFavorite(e.path, Playback.musicTitle, Playback.musicArtist, Playback.player.urlStr,
-                                      e.source, Math.floor(Playback.player.duration / 1000), "song");
-            likeButton.iconColor = Theme.themeColor;
-            Options.warned("已收藏", 1);
-        }
+        Options.favPicker.show({ id: e.path, title: Playback.musicTitle, artist: Playback.musicArtist,
+                                 cover: Playback.player.urlStr, source: e.source,
+                                 duration: Math.floor(Playback.player.duration / 1000) });
     }
 
     function openPlayerOptions(): void { playerOptions.open() }
@@ -618,27 +610,5 @@ FavoriteSongs.addFavorite(Options.queue.get(Options.queue.playListIndex).path, P
 
     MusicInfo {
         id: musicInfo
-    }
-
-    QOptionDialog {
-        id: optionsEQ
-        title: "音频工作台"
-        width: 640
-        headerHeight: 60
-        header: QTapBar {
-            id: eqTab
-            y: 36
-            height: 32
-            model: ["音频处理", "声道", "增益与动态"]
-            onIndexChanged: optionsEQ.goTop();
-        }
-
-        options: EqualizerPanel {
-            width: parent.width
-            height: 870
-            controlWidth: parent.width
-            display: eqTab.index + 1
-            engine: musicControlMin.player
-        }
     }
 }

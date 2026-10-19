@@ -52,11 +52,13 @@ class MusicApiService : public QObject
     Q_PROPERTY(OnlineListModel* personalRadar READ personalRadar CONSTANT FINAL)
     // 歌曲评论（在线音乐才有）
     Q_PROPERTY(OnlineListModel* comments READ comments CONSTANT FINAL)
+    // 评论是否还有下一页（平台在结果里透出，避免 QML 用条数取模猜）
+    Q_PROPERTY(bool commentsHasMore READ commentsHasMore NOTIFY commentsHasMoreChanged FINAL)
 
     // 非模型数据
     Q_PROPERTY(QVariant allPlaylistMenu READ allPlaylistMenu WRITE setAllPlaylistMenu NOTIFY allPlaylistMenuChanged FINAL)
-    Q_PROPERTY(QVariant lyricsData READ lyricsData WRITE setLyricsData NOTIFY lyricsDataChanged FINAL)
-    Q_PROPERTY(QVariant lyricsTranslate READ lyricsTranslate WRITE setLyricsTranslate NOTIFY lyricsTranslateChanged FINAL)
+    Q_PROPERTY(QVariantList lyricsData READ lyricsData WRITE setLyricsData NOTIFY lyricsDataChanged FINAL)
+    Q_PROPERTY(QVariantList lyricsTranslate READ lyricsTranslate WRITE setLyricsTranslate NOTIFY lyricsTranslateChanged FINAL)
 
     Q_PROPERTY(bool lyricFollowActive READ lyricFollowActive WRITE setLyricFollowActive NOTIFY lyricFollowActiveChanged FINAL)
     Q_PROPERTY(qlonglong lyricPositionMs READ lyricPositionMs WRITE setLyricPositionMs NOTIFY lyricPositionMsChanged FINAL)
@@ -110,13 +112,15 @@ public:
     OnlineListModel *personalFm() { return &m_personalFm; }
     OnlineListModel *personalRadar() { return &m_personalRadar; }
     OnlineListModel *comments() { return &m_comments; }
+    bool commentsHasMore() const { return m_commentsHasMore; }
+    void setCommentsHasMore(bool hasMore);
 
     QVariant allPlaylistMenu() const { return m_allPlaylistMenu; }
     void setAllPlaylistMenu(const QVariant &v);
-    QVariant lyricsData() const { return m_lyricsData; }
-    void setLyricsData(const QVariant &v);
-    QVariant lyricsTranslate() const { return m_lyricsTranslate; }
-    void setLyricsTranslate(const QVariant &v);
+    QVariantList lyricsData() const { return m_lyricsData; }
+    void setLyricsData(const QVariantList &v);
+    QVariantList lyricsTranslate() const { return m_lyricsTranslate; }
+    void setLyricsTranslate(const QVariantList &v);
 
     bool lyricFollowActive() const { return m_lyricFollowActive; }
     void setLyricFollowActive(bool active);
@@ -219,6 +223,7 @@ signals:
     void globalinfoChanged();
     void nowIndexChanged();
     void songFilterChanged();
+    void commentsHasMoreChanged();
     void downloadPathChanged();
     void localLyricsReady(const QString &filePath, const QVariantList &lyrics,
                           const QVariantList &translate);
@@ -299,10 +304,11 @@ private:
     OnlineListModel m_personalFm;
     OnlineListModel m_personalRadar;
     OnlineListModel m_comments;
+    bool m_commentsHasMore = false;
 
     QVariant m_allPlaylistMenu;
-    QVariant m_lyricsData;
-    QVariant m_lyricsTranslate { QVariantList() };    // 初始化为空列表：QML 侧 .length 绑定在歌词未加载时也可用
+    QVariantList m_lyricsData;
+    QVariantList m_lyricsTranslate;
 
     // 下载流程：按 hash 暂存待下载元数据，等歌词返回后一起发起下载
     QMap<QString, QVariantMap> m_pendingDownloads;
@@ -331,7 +337,7 @@ private:
     int m_nowIndex = 0;
 
     void setLyricIndex(int index);
-    void rebuildLyricTimes(const QVariant &v);
+    void rebuildLyricTimes(const QVariantList &list);
     void advanceLyricIndex();
     QTimer m_lyricTimer;
     QList<qlonglong> m_lyricTimes;

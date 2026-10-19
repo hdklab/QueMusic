@@ -9,13 +9,14 @@ Popup {
     property Item blurSource: Options.mainLayout // 使用父内容作为模糊源
     property rect rectXy: Qt.rect(dialog.x, dialog.y, dialog.width, dialog.height)
     property alias title: titleText.text
-    property alias options: content.children
+    property alias options: content.sourceComponent
     property alias header: titleText.children
     property string cancelText: ""
     property string cancelIcon: "\uf10f"
     property string confirmText: "完成"
     property bool isInput: false
     property bool dismissOnOverlay: true
+    property color cardColor: Theme.primaryBlurColor
     // false 时 cancel 只发信号、不关闭：调用方把左下按钮当确认按钮用时
     // （例如网易云手机号登录，失败提示要留在弹窗里）
     property bool cancelCloses: true
@@ -46,6 +47,7 @@ Popup {
         rectXy: dialog.rectXy
         shadowEffect: true
         borderRadius: Style.cubeRadius
+        cardColor: dialog.cardColor
     }
 
     contentItem: Column {
@@ -68,7 +70,7 @@ Popup {
         Flickable {
             id: dialogContent
             width: contentCol.width + 10
-            height: dialog.visible ? (contentHeight > window.height - 320 ? window.height - 320 : contentHeight) : 0
+            height: dialog.visible ? (contentHeight > dialog.parent.height - 320 ? dialog.parent.height - 320 : contentHeight) : 0
             contentHeight: contentItem.childrenRect.height
             contentWidth: width - 10
             boundsBehavior: Flickable.StopAtBounds
@@ -79,11 +81,12 @@ Popup {
                 anchors.top: dialogContent.top
                 anchors.bottom: dialogContent.bottom
             }
-            Item {
+            Loader {
                 id: content
                 width: dialogContent.contentWidth
-                // 弹窗销毁时 children 会先被清空，直接取 [0] 会抛 TypeError
-                height: children.length > 0 ? children[0].height : 0
+                visible: dialog.visible
+                active: visible
+                //height: children.length > 0 ? children[0].height : 0
             }
         }
 
